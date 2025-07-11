@@ -96,13 +96,13 @@ export const getChats = async (req, res) => {
     if (role === "student") {
       chats = await Chat.find({ student: userId })
         .populate("instructor", "name avatar")
-        .populate("course", "title")
+        .populate("course", "title courseTitle")
         .populate("lastMessage")
         .sort({ updatedAt: -1 });
     } else if (role === "instructor") {
       chats = await Chat.find({ instructor: userId })
         .populate("student", "name avatar")
-        .populate("course", "title")
+        .populate("course", "title courseTitle")
         .populate("lastMessage")
         .sort({ updatedAt: -1 });
     }

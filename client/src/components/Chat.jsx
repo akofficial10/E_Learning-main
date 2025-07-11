@@ -6,6 +6,8 @@ import {
   MessageOutlined,
   UserOutlined,
   CloseOutlined,
+  ArrowLeftOutlined,
+  SendOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import moment from "moment";
@@ -18,11 +20,27 @@ const Chat = ({ courseId, instructorId, triggerButton }) => {
   const [activeChat, setActiveChat] = useState(null);
   const [unreadCounts, setUnreadCounts] = useState({});
   const [socket, setSocket] = useState(null);
+  const [isMobileView, setIsMobileView] = useState(false);
   const messagesEndRef = useRef(null);
   const { user } = useSelector((state) => state.auth);
 
+  const getCourseTitle = (course) => {
+    if (!course) return "";
+    return course.courseTitle || course.title || "";
+  };
+
   const API_BASE_URL =
     import.meta.env.VITE_API_URL || "http://localhost:8080/api/v1";
+
+  // Check for mobile view
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobileView(window.innerWidth < 768);
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -202,6 +220,11 @@ const Chat = ({ courseId, instructorId, triggerButton }) => {
     }
   };
 
+  const totalUnreadCount = Object.values(unreadCounts).reduce(
+    (a, b) => a + b,
+    0
+  );
+
   return (
     <>
       {triggerButton ? (
@@ -217,200 +240,376 @@ const Chat = ({ courseId, instructorId, triggerButton }) => {
           },
         })
       ) : (
-        <Button
-          type="text"
-          icon={<MessageOutlined />}
-          onClick={() => setVisible(true)}
-          style={{ display: "flex", alignItems: "center" }}
-        >
-          Messages
-          {Object.values(unreadCounts).reduce((a, b) => a + b, 0) > 0 && (
-            <Badge
-              count={Object.values(unreadCounts).reduce((a, b) => a + b, 0)}
-              style={{ marginLeft: 8 }}
-            />
-          )}
-        </Button>
+        <Badge count={totalUnreadCount} offset={[-5, 5]} size="small">
+          <Button
+            type="text"
+            icon={<MessageOutlined />}
+            onClick={() => setVisible(true)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              color: "#2c3e50",
+              fontWeight: 500,
+            }}
+          >
+            Messages
+          </Button>
+        </Badge>
       )}
 
       <Modal
         title={
-          activeChat ? (
-            <div style={{ display: "flex", alignItems: "center" }}>
-              <Avatar
-                src={
-                  user.role === "student"
-                    ? activeChat.instructor.avatar
-                    : activeChat.student.avatar
-                }
-                icon={<UserOutlined />}
+          <div style={{ display: "flex", alignItems: "center" }}>
+            {isMobileView && activeChat && (
+              <Button
+                type="text"
+                icon={<ArrowLeftOutlined />}
+                onClick={() => setActiveChat(null)}
+                style={{ marginRight: 8 }}
               />
-              <span style={{ marginLeft: 8 }}>
-                {user.role === "student"
-                  ? activeChat.instructor.name
-                  : activeChat.student.name}
+            )}
+            {activeChat ? (
+              <div style={{ display: "flex", alignItems: "center" }}>
+                <Avatar
+                  src={
+                    user.role === "student"
+                      ? activeChat.instructor?.photoUrl ||
+                        "https://github.com/shadcn.png"
+                      : activeChat.student?.photoUrl ||
+                        "https://github.com/shadcn.png"
+                  }
+                  icon={<UserOutlined />}
+                  style={{ backgroundColor: "#1890ff" }}
+                />
+                <div style={{ marginLeft: 12 }}>
+                  <div style={{ fontWeight: 500, color: "#2c3e50" }}>
+                    {user.role === "student"
+                      ? activeChat.instructor?.name
+                      : activeChat.student?.name}
+                  </div>
+                  {activeChat.course && (
+                    <div style={{ color: "#7f8c8d", fontSize: 12 }}>
+                      {getCourseTitle(activeChat.course)}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <span style={{ fontWeight: 500, color: "#2c3e50" }}>
+                Messages
               </span>
-              <span style={{ marginLeft: 8, color: "#888" }}>
-                ({activeChat.course.title})
-              </span>
-            </div>
-          ) : (
-            "Select a chat"
-          )
+            )}
+          </div>
         }
         open={visible}
         onCancel={() => setVisible(false)}
         footer={null}
-        width={800}
-        styles={{ body: { padding: 0 } }}
+        width={isMobileView ? "90%" : 800}
+        bodyStyle={{ padding: 0 }}
         closable={false}
-        closeIcon={<CloseOutlined />}
+        closeIcon={<CloseOutlined style={{ color: "#7f8c8d" }} />}
+        style={{ top: 20 }}
+        className="chat-modal"
       >
-        <div style={{ display: "flex", height: "60vh" }}>
-          <div
-            style={{
-              width: 250,
-              borderRight: "1px solid #f0f0f0",
-              overflowY: "auto",
-            }}
-          >
-            <List
-              dataSource={chats}
-              renderItem={(chat) => (
-                <List.Item
-                  onClick={() => setActiveChat(chat)}
-                  style={{
-                    cursor: "pointer",
-                    padding: 12,
-                    backgroundColor:
-                      activeChat?._id === chat._id ? "#f0f7ff" : "transparent",
-                    borderBottom: "1px solid #f0f0f0",
-                  }}
-                >
-                  <List.Item.Meta
-                    avatar={
-                      <Avatar
-                        src={
-                          user.role === "student"
-                            ? chat.instructor.avatar
-                            : chat.student.avatar
-                        }
-                        icon={<UserOutlined />}
-                      />
-                    }
-                    title={
-                      user.role === "student"
-                        ? chat.instructor.name
-                        : chat.student.name
-                    }
-                    description={chat.course.title}
-                  />
-                  {unreadCounts[chat._id] > 0 && (
-                    <Badge count={unreadCounts[chat._id]} />
-                  )}
-                  <div style={{ color: "#888", fontSize: 12 }}>
-                    {moment(chat.lastMessage?.timestamp).format("h:mm A")}
-                  </div>
-                </List.Item>
-              )}
-            />
-          </div>
-
-          <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-            {activeChat ? (
-              <>
-                <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
-                  {messages.map((message) => (
-                    <div
-                      key={message._id}
-                      style={{
-                        display: "flex",
-                        justifyContent:
-                          message.sender._id === user._id
-                            ? "flex-end"
-                            : "flex-start",
-                        marginBottom: 16,
-                      }}
-                    >
-                      <Card
-                        size="small"
-                        style={{
-                          maxWidth: "70%",
-                          backgroundColor:
-                            message.sender._id === user._id
-                              ? "#1890ff"
-                              : "#f0f0f0",
-                          color:
-                            message.sender._id === user._id ? "white" : "black",
-                          border: "none",
-                        }}
-                      >
-                        <div>{message.content}</div>
-                        <div
-                          style={{
-                            fontSize: 12,
-                            color:
-                              message.sender._id === user._id
-                                ? "rgba(255,255,255,0.7)"
-                                : "rgba(0,0,0,0.45)",
-                            textAlign: "right",
-                            marginTop: 4,
-                          }}
-                        >
-                          {moment(message.timestamp).format("h:mm A")}
-                          {message.sender._id === user._id && (
-                            <span style={{ marginLeft: 4 }}>
-                              {message.read ? "✓✓" : "✓"}
-                            </span>
-                          )}
-                        </div>
-                      </Card>
-                    </div>
-                  ))}
-                  <div ref={messagesEndRef} />
-                </div>
-                <div style={{ padding: 16, borderTop: "1px solid #f0f0f0" }}>
-                  <Input.TextArea
-                    value={inputMessage}
-                    onChange={(e) => setInputMessage(e.target.value)}
-                    placeholder="Type a message..."
-                    autoSize={{ minRows: 2, maxRows: 4 }}
-                    onPressEnter={(e) => {
-                      if (!e.shiftKey) {
-                        e.preventDefault();
-                        handleSendMessage();
-                      }
-                    }}
-                  />
-                  <Button
-                    type="primary"
-                    onClick={handleSendMessage}
-                    style={{ marginTop: 8 }}
-                    disabled={!inputMessage.trim()}
-                  >
-                    Send
-                  </Button>
-                </div>
-              </>
-            ) : (
+        <div
+          style={{
+            display: "flex",
+            height: isMobileView ? "70vh" : "60vh",
+            flexDirection: isMobileView && activeChat ? "column" : "row",
+          }}
+        >
+          {(!isMobileView || !activeChat) && (
+            <div
+              style={{
+                width: isMobileView ? "100%" : 250,
+                borderRight: "1px solid #ecf0f1",
+                overflowY: "auto",
+                backgroundColor: "#f8f9fa",
+              }}
+            >
               <div
                 style={{
-                  flex: 1,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
+                  padding: 16,
+                  borderBottom: "1px solid #ecf0f1",
+                  backgroundColor: "#fff",
                 }}
               >
-                {user?.role === "student" && courseId ? (
-                  <Button type="primary" onClick={startNewChat}>
-                    Start New Chat with Instructor
-                  </Button>
-                ) : (
-                  <div>Select a chat to view messages</div>
-                )}
+                <Input.Search
+                  placeholder="Search chats..."
+                  style={{ width: "100%" }}
+                />
               </div>
-            )}
-          </div>
+              <List
+                dataSource={chats}
+                renderItem={(chat) => (
+                  <List.Item
+                    onClick={() => setActiveChat(chat)}
+                    style={{
+                      cursor: "pointer",
+                      padding: 12,
+                      backgroundColor:
+                        activeChat?._id === chat._id ? "#e8f4fd" : "#fff",
+                      borderBottom: "1px solid #ecf0f1",
+                      transition: "background-color 0.3s",
+                    }}
+                  >
+                    <List.Item.Meta
+                      avatar={
+                        <Avatar
+                          src={
+                            user.role === "student"
+                              ? chat.instructor?.photoUrl ||
+                                "https://github.com/shadcn.png"
+                              : chat.student?.photoUrl ||
+                                "https://github.com/shadcn.png"
+                          }
+                          icon={<UserOutlined />}
+                          style={{ backgroundColor: "#1890ff" }}
+                        />
+                      }
+                      title={
+                        <div style={{ fontWeight: 500, color: "#2c3e50" }}>
+                          {user.role === "student"
+                            ? chat.instructor?.name
+                            : chat.student?.name}
+                        </div>
+                      }
+                      description={
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                          }}
+                        >
+                          <span
+                            style={{
+                              color: "#7f8c8d",
+                              fontSize: 12,
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              maxWidth: "70%",
+                            }}
+                          >
+                            {chat.lastMessage?.content || "No messages yet"}
+                          </span>
+                          <span style={{ color: "#bdc3c7", fontSize: 12 }}>
+                            {moment(chat.lastMessage?.timestamp).format(
+                              "h:mm A"
+                            )}
+                          </span>
+                        </div>
+                      }
+                    />
+                    {unreadCounts[chat._id] > 0 && (
+                      <Badge
+                        count={unreadCounts[chat._id]}
+                        style={{ backgroundColor: "#1890ff" }}
+                      />
+                    )}
+                  </List.Item>
+                )}
+              />
+              {user?.role === "student" && courseId && (
+                <div style={{ padding: 16 }}>
+                  <Button
+                    type="primary"
+                    block
+                    onClick={startNewChat}
+                    style={{
+                      backgroundColor: "#1890ff",
+                      borderColor: "#1890ff",
+                    }}
+                  >
+                    New Chat
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {(!isMobileView || activeChat) && (
+            <div
+              style={{
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                backgroundColor: "#fff",
+              }}
+            >
+              {activeChat ? (
+                <>
+                  <div
+                    style={{
+                      flex: 1,
+                      overflowY: "auto",
+                      padding: 16,
+                      backgroundImage:
+                        "linear-gradient(to bottom, #f8f9fa 0%, #fff 100%)",
+                    }}
+                  >
+                    {messages.length === 0 && (
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "center",
+                          alignItems: "center",
+                          height: "100%",
+                          color: "#7f8c8d",
+                        }}
+                      >
+                        No messages yet. Start the conversation!
+                      </div>
+                    )}
+                    {messages.map((message) => (
+                      <div
+                        key={message._id}
+                        style={{
+                          display: "flex",
+                          justifyContent:
+                            message.sender._id === user._id
+                              ? "flex-end"
+                              : "flex-start",
+                          marginBottom: 16,
+                        }}
+                      >
+                        <div
+                          style={{
+                            maxWidth: "80%",
+                            borderRadius: 12,
+                            padding: "10px 14px",
+                            backgroundColor:
+                              message.sender._id === user._id
+                                ? "#1890ff"
+                                : "#ecf0f1",
+                            color:
+                              message.sender._id === user._id
+                                ? "white"
+                                : "#2c3e50",
+                            boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
+                            position: "relative",
+                          }}
+                        >
+                          <div style={{ wordBreak: "break-word" }}>
+                            {message.content}
+                          </div>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "flex-end",
+                              alignItems: "center",
+                              marginTop: 4,
+                              fontSize: 11,
+                              color:
+                                message.sender._id === user._id
+                                  ? "rgba(255,255,255,0.7)"
+                                  : "rgba(0,0,0,0.45)",
+                            }}
+                          >
+                            {moment(message.timestamp).format("h:mm A")}
+                            {message.sender._id === user._id && (
+                              <span style={{ marginLeft: 4 }}>
+                                {message.read ? (
+                                  <span style={{ color: "#70c1ff" }}>✓✓</span>
+                                ) : (
+                                  <span>✓</span>
+                                )}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    <div ref={messagesEndRef} />
+                  </div>
+                  <div
+                    style={{
+                      padding: 16,
+                      borderTop: "1px solid #ecf0f1",
+                      backgroundColor: "#fff",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                      }}
+                    >
+                      <Input.TextArea
+                        value={inputMessage}
+                        onChange={(e) => setInputMessage(e.target.value)}
+                        placeholder="Type a message..."
+                        autoSize={{ minRows: 1, maxRows: 4 }}
+                        onPressEnter={(e) => {
+                          if (!e.shiftKey) {
+                            e.preventDefault();
+                            handleSendMessage();
+                          }
+                        }}
+                        style={{
+                          borderRadius: 20,
+                          padding: "8px 16px",
+                          flex: 1,
+                        }}
+                      />
+                      <Button
+                        type="primary"
+                        shape="circle"
+                        icon={<SendOutlined />}
+                        onClick={handleSendMessage}
+                        disabled={!inputMessage.trim()}
+                        style={{
+                          backgroundColor: "#1890ff",
+                          borderColor: "#1890ff",
+                          width: 40,
+                          height: 40,
+                        }}
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div
+                  style={{
+                    flex: 1,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexDirection: "column",
+                    padding: 24,
+                    textAlign: "center",
+                    backgroundColor: "#f8f9fa",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 18,
+                      color: "#7f8c8d",
+                      marginBottom: 16,
+                    }}
+                  >
+                    {user?.role === "student" && courseId
+                      ? "Start a new conversation with your instructor"
+                      : "Select a chat to view messages"}
+                  </div>
+                  {user?.role === "student" && courseId && (
+                    <Button
+                      type="primary"
+                      onClick={startNewChat}
+                      style={{
+                        backgroundColor: "#1890ff",
+                        borderColor: "#1890ff",
+                      }}
+                    >
+                      Start New Chat
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </Modal>
     </>
